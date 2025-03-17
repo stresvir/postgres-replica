@@ -1,65 +1,65 @@
 services:
-  postgres-main:
-    image: postgres:17.4
-    container_name: postgres-main
+  postgres-main:  # Layanan utama PostgreSQL (Primary Database)
+    image: postgres:17.4  # Menggunakan image PostgreSQL versi 17.4
+    container_name: postgres-main  # Nama container agar mudah dikenali
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: main_db
-      PGDATA: /var/lib/postgresql/data
+      POSTGRES_USER: postgres  # Username default PostgreSQL
+      POSTGRES_PASSWORD: secret  # Password untuk user postgres
+      POSTGRES_DB: main_db  # Nama database yang dibuat saat pertama kali container dijalankan
+      PGDATA: /var/lib/postgresql/data  # Lokasi penyimpanan data PostgreSQL
     volumes:
-      - ~/Documents/postgres_data/main:/var/lib/postgresql/data
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf
-      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - ~/Documents/postgres_data/main:/var/lib/postgresql/data  # Menyimpan data PostgreSQL di luar container (persistensi)
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf  # Menggunakan konfigurasi PostgreSQL kustom
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf  # Menggunakan konfigurasi autentikasi kustom
     command: ["postgres",
               "-c", "config_file=/etc/postgresql/postgresql.conf",
-              "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+              "-c", "hba_file=/etc/postgresql/pg_hba.conf"]  # Menjalankan PostgreSQL dengan konfigurasi khusus
     ports:
-      - "5432:5432"
+      - "5432:5432"  # Mengekspos PostgreSQL pada port 5432 (default)
     networks:
-      - postgres-db-network
-    restart: always
+      - postgres-db-network  # Menghubungkan ke jaringan Docker agar bisa berkomunikasi dengan service lain
+    restart: always  # Restart otomatis jika container mati
 
-  postgres-replica:
-    image: postgres:17.4
-    container_name: postgres-replica
+  postgres-replica:  # Layanan PostgreSQL sebagai Replica (Standby Database)
+    image: postgres:17.4  # Menggunakan image PostgreSQL versi 17.4
+    container_name: postgres-replica  # Nama container agar mudah dikenali
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
-      PGDATA: /var/lib/postgresql/data
+      POSTGRES_USER: postgres  # Username harus sama dengan primary agar replikasi berjalan
+      POSTGRES_PASSWORD: secret  # Password harus sama dengan primary
+      PGDATA: /var/lib/postgresql/data  # Lokasi penyimpanan data PostgreSQL
     volumes:
-      - ~/Documents/postgres_data/replica:/var/lib/postgresql/data
+      - ~/Documents/postgres_data/replica:/var/lib/postgresql/data  # Menyimpan data PostgreSQL di luar container (persistensi)
     depends_on:
-      - postgres-main
+      - postgres-main  # Container ini hanya berjalan setelah postgres-main siap
     networks:
-      - postgres-db-network
-    restart: always
-    command: >
+      - postgres-db-network  # Menghubungkan ke jaringan Docker agar bisa berkomunikasi dengan Primary
+    restart: always  # Restart otomatis jika container mati
+    command: >  # Perintah khusus agar replica bisa melakukan replikasi dari primary
       bash -c "until pg_isready -h postgres-main -p 5432; do sleep 2; done;
-      gosu postgres rm -rf /var/lib/postgresql/data/* &&
-      gosu postgres pg_basebackup -h postgres-main -D /var/lib/postgresql/data -U postgres -Fp -Xs -P -R &&
-      exec gosu postgres postgres"
+      gosu postgres rm -rf /var/lib/postgresql/data/* &&  # Hapus data lama sebelum sinkronisasi
+      gosu postgres pg_basebackup -h postgres-main -D /var/lib/postgresql/data -U postgres -Fp -Xs -P -R &&  # Backup data dari Primary
+      exec gosu postgres postgres"  # Jalankan PostgreSQL sebagai Replica
 
-  pgadmin:
-    image: dpage/pgadmin4:9.1.0
-    container_name: pgadmin
+  pgadmin:  # Layanan untuk GUI PostgreSQL (Web-based Admin Tool)
+    image: dpage/pgadmin4:9.1.0  # Menggunakan image pgAdmin versi 9.1.0
+    container_name: pgadmin  # Nama container agar mudah dikenali
     environment:
-      PGADMIN_DEFAULT_EMAIL: 'test@test.com'
-      PGADMIN_DEFAULT_PASSWORD: 'test'
+      PGADMIN_DEFAULT_EMAIL: 'test@test.com'  # Email untuk login pgAdmin
+      PGADMIN_DEFAULT_PASSWORD: 'test'  # Password untuk login pgAdmin
     ports:
-      - "16543:80"
+      - "16543:80"  # Mengekspos pgAdmin di port 16543, bisa diakses dengan `http://localhost:16543`
     volumes:
-      - ./servers.json:/pgadmin4/servers.json
+      - ./servers.json:/pgadmin4/servers.json  # Konfigurasi server untuk pgAdmin
     networks:
-      - postgres-db-network
-    restart: always
+      - postgres-db-network  # Menghubungkan ke jaringan Docker agar bisa berkomunikasi dengan database
+    restart: always  # Restart otomatis jika container mati
 
 volumes:
   postgres-data-main:
-    driver: local
+    driver: local  # Volume untuk menyimpan data dari Primary
   postgres-data-replica:
-    driver: local
+    driver: local  # Volume untuk menyimpan data dari Replica
 
 networks:
   postgres-db-network:
-    driver: bridge
+    driver: bridge  # Jaringan bridge agar semua container bisa saling berkomunikasi
