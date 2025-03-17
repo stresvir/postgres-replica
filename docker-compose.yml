@@ -1,0 +1,65 @@
+services:
+  postgres-main:
+    image: postgres:17.4
+    container_name: postgres-main
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: main_db
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - ~/Documents/postgres_data/main:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
+    command: ["postgres",
+              "-c", "config_file=/etc/postgresql/postgresql.conf",
+              "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+    ports:
+      - "5432:5432"
+    networks:
+      - postgres-db-network
+    restart: always
+
+  postgres-replica:
+    image: postgres:17.4
+    container_name: postgres-replica
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - ~/Documents/postgres_data/replica:/var/lib/postgresql/data
+    depends_on:
+      - postgres-main
+    networks:
+      - postgres-db-network
+    restart: always
+    command: >
+      bash -c "until pg_isready -h postgres-main -p 5432; do sleep 2; done;
+      gosu postgres rm -rf /var/lib/postgresql/data/* &&
+      gosu postgres pg_basebackup -h postgres-main -D /var/lib/postgresql/data -U postgres -Fp -Xs -P -R &&
+      exec gosu postgres postgres"
+
+  pgadmin:
+    image: dpage/pgadmin4:9.1.0
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: 'test@test.com'
+      PGADMIN_DEFAULT_PASSWORD: 'test'
+    ports:
+      - "16543:80"
+    volumes:
+      - ./servers.json:/pgadmin4/servers.json
+    networks:
+      - postgres-db-network
+    restart: always
+
+volumes:
+  postgres-data-main:
+    driver: local
+  postgres-data-replica:
+    driver: local
+
+networks:
+  postgres-db-network:
+    driver: bridge
